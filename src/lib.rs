@@ -403,7 +403,7 @@ type EdgeType = usize;
 type RecipeGraph = petgraph::graph::Graph<NodeType, EdgeType>;
 
 pub fn find_recipe(options: &Options) -> Option<Recipe> {
-	let pregraph = std::time::Instant::now();
+	// let pregraph = std::time::Instant::now();
 	tracing::debug!("Populating graph...");
 	let mut graph = RecipeGraph::default();
 
@@ -498,9 +498,9 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 		// eprintln!(".");
 	}
 
-	let prefind = std::time::Instant::now();
-	let tm = prefind.duration_since(pregraph).as_millis();
-	tracing::debug!("Done in {tm}ms. Finding a recipe...");
+	// let prefind = std::time::Instant::now();
+	// let tm = prefind.duration_since(pregraph).as_millis();
+	// tracing::debug!("Done in {tm}ms. Finding a recipe...");
 	// find matching recipes
 
 	let target_value = (options.affinity.offset() + options.player_number) % 138;
@@ -525,8 +525,8 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 		}
 	}
 
-	let postfind = std::time::Instant::now();
-	let tm = postfind.duration_since(prefind).as_millis();
-	tracing::debug!("Done in {tm}ms.");
+	// let postfind = std::time::Instant::now();
+	// let tm = postfind.duration_since(prefind).as_millis();
+	// tracing::debug!("Done in {tm}ms.");
 	best_recipe
 }
