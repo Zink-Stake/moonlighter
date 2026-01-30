@@ -1,5 +1,30 @@
 use clap::Parser;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+#[derive(Hash, Clone, Debug, Eq, PartialEq)]
+struct Recipe {
+	unique_vegs: BTreeMap<Veg, Processing>,
+	cereal: Veg,
+	filler_sugars: usize,
+}
+
+impl Recipe {
+	fn affinity(&self) -> usize {
+		let sum: usize = self.unique_vegs.iter().map(|(v, p)| v.value() + p.value()).sum();
+		sum + self.cereal.value() + self.filler_sugars * 47
+	}
+}
+
+impl Default for Recipe {
+	fn default() -> Self {
+		Recipe {
+			unique_vegs: Default::default(),
+			cereal: Veg::Wheat,
+			filler_sugars: 1,
+		}
+	}
+}
+
 impl Veg {
 	fn value(&self) -> usize {
 		match self {
@@ -62,20 +87,18 @@ enum Processing {
 	Roasted,
 }
 
-fn chain_value(chain: &BTreeMap<Veg, Processing>) -> usize {
-	chain.iter().map(|(v, p)| v.value() + p.value()).sum()
-}
-
 #[derive(Parser)]
 struct Options {
 	#[arg(long)]
 	rare: bool,
 	target_value: usize,
-	#[arg(long, default_value = "5")]
+	#[arg(long, default_value = "12")]
 	max_length: usize,
+	#[arg(long, default_value = "50")]
+	max_sugars: usize,
 }
 
-type NodeType = BTreeMap<Veg, Processing>;
+type NodeType = Recipe;
 type EdgeType = usize;
 type RecipeGraph = petgraph::graph::Graph<NodeType, EdgeType>;
 
@@ -88,61 +111,84 @@ fn main() {
 
 	let mut node_idxs: HashMap<NodeType, petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>> = Default::default();
 
+	let mut veg_pool: Vec<(Veg, Processing)> = Default::default();
+	for veg in [
+		Veg::Cabbage,
+		Veg::Carrot,
+		Veg::Corn,
+		Veg::Cucumber,
+		Veg::Lettuce,
+		Veg::Onion,
+		Veg::Pea,
+		Veg::PeaPod,
+		Veg::Potato,
+		Veg::Tomato,
+		Veg::Garlic,
+		Veg::Pumpkin,
+	] {
+		for processing in [
+			Processing::Chopped,
+			//Processing::Fried,
+			Processing::Mashed,
+			// Processing::Roasted,
+		] {
+			veg_pool.push((veg, processing));
+		}
+	}
+
 	let mut node_queue = vec![];
 	let mut add_node = |idx: petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>, graph: &mut RecipeGraph, node_queue: &mut Vec<petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>>| {
 		let current_node = &graph[idx].clone();
-		if current_node.len() < options.max_length {
-			for veg in [
-				Veg::Cabbage,
-				Veg::Carrot,
-				Veg::Corn,
-				Veg::Cucumber,
-				Veg::Lettuce,
-				Veg::Onion,
-				Veg::Pea,
-				Veg::PeaPod,
-				Veg::Potato,
-				Veg::Tomato,
-				Veg::Garlic,
-				Veg::Pumpkin,
-			] {
-				if current_node.contains_key(&veg) {
+		if current_node.unique_vegs.len() < options.max_length {
+			for (veg, processing) in veg_pool.clone() {
+				if current_node.unique_vegs.contains_key(&veg) {
 					continue;
 				};
-
-				for processing in [
-					Processing::Chopped,
-					Processing::Fried,
-					//Processing::Mashed,
-					// Processing::Roasted,
-				] {
-					let mut next_node = current_node.clone();
-					next_node.insert(veg, processing);
-					let next_value = chain_value(&next_node);
-					let next_idx = match node_idxs.get(&next_node) {
-						Some(next_idx) => *next_idx,
-						None => {
-							// eprintln!("{:?}", next_node);
-							let nnn = next_node.clone();
-							let idx = graph.add_node(next_node);
-							node_idxs.insert(nnn, idx);
-							idx
-						}
-					};
-					if graph.find_edge(idx, next_idx).is_none() {
-						graph.add_edge(idx, next_idx, next_value);
-						node_queue.push(next_idx);
+				let mut next_node = current_node.clone();
+				next_node.unique_vegs.insert(veg, processing);
+				let next_value = next_node.affinity();
+				let next_idx = match node_idxs.get(&next_node) {
+					Some(next_idx) => *next_idx,
+					None => {
+						// eprintln!("{:?}", next_node);
+						let nnn = next_node.clone();
+						let idx = graph.add_node(next_node);
+						node_idxs.insert(nnn, idx);
+						idx
 					}
+				};
+				if graph.find_edge(idx, next_idx).is_none() {
+					graph.add_edge(idx, next_idx, next_value);
+					node_queue.push(next_idx);
 				}
 			}
-		};
+		} else if current_node.filler_sugars == 1 {
+			for add in 2..options.max_sugars {
+				let mut next_node = current_node.clone();
+				next_node.filler_sugars = add;
+				let next_value = next_node.affinity();
+				let next_idx = match node_idxs.get(&next_node) {
+					Some(next_idx) => *next_idx,
+					None => {
+						// eprintln!("{:?}", next_node);
+						let nnn = next_node.clone();
+						let idx = graph.add_node(next_node);
+						node_idxs.insert(nnn, idx);
+						idx
+					}
+				};
+				if graph.find_edge(idx, next_idx).is_none() {
+					graph.add_edge(idx, next_idx, next_value);
+					node_queue.push(next_idx);
+				}
+			}
+		}
 	};
 
-	let w_idx = graph.add_node([(Veg::Wheat, Processing::Whole)].into());
-	let b_idx = graph.add_node([(Veg::Barley, Processing::Whole)].into());
+	let w_idx = graph.add_node(Default::default());
 
 	node_queue.push(w_idx);
-	node_queue.push(b_idx);
+	// node_queue.push(b_idx);
 
 	// populate the graph
 	while let Some(next_idx) = node_queue.pop() {
@@ -160,7 +206,6 @@ fn main() {
 	let target_value = options.target_value;
 	let mut offset = 0;
 	offset += 40; // oven
-	offset += 47; // sugar
 	offset += 75; // cauldron
 	if options.rare {
 		offset += 1;
@@ -168,23 +213,16 @@ fn main() {
 
 	let mut dfs = petgraph::visit::Dfs::new(&graph, w_idx);
 
-	let mut current_leader = 0;
+	let mut max_vegs = 0;
+	let mut min_sugars = 99;
 	while let Some(next) = dfs.next(&graph) {
-		let value = (chain_value(&graph[next]) + offset) % 138;
-		if target_value == value && current_leader < graph[next].len() {
-			current_leader = graph[next].len();
-			eprintln!("Len: {} {:?}", graph[next].len(), graph[next]);
-		}
-	}
+		let next_node = &graph[next];
+		let value = (next_node.affinity() + offset) % 138;
 
-	let mut dfs = petgraph::visit::Dfs::new(&graph, b_idx);
-
-	let mut current_leader = 0;
-	while let Some(next) = dfs.next(&graph) {
-		let value = (chain_value(&graph[next]) + offset) % 138;
-		if target_value == value && current_leader < graph[next].len() {
-			current_leader = graph[next].len();
-			eprintln!("Len: {} {:?}", graph[next].len(), graph[next]);
+		if target_value == value && next_node.unique_vegs.len() > max_vegs || next_node.unique_vegs.len() == max_vegs && next_node.filler_sugars < min_sugars {
+			max_vegs = next_node.unique_vegs.len();
+			min_sugars = next_node.filler_sugars;
+			eprintln!("Len: {} {:?}", graph[next].unique_vegs.len(), graph[next]);
 		}
 	}
 
