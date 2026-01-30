@@ -234,11 +234,25 @@ fn main() {
 
 		if target_value == value && best_recipe.as_ref().is_none_or(|r| r < next_node) {
 			best_recipe = Some(next_node.clone());
-			eprintln!("Len: {} {:?}", graph[next].unique_vegs.len(), graph[next]);
+			// eprintln!("Len: {} {:?}", graph[next].unique_vegs.len(), graph[next]);
 		}
 	}
 
 	let postfind = std::time::Instant::now().duration_since(prefind).as_secs();
 	let tm = prefind.duration_since(pregraph).as_secs();
 	eprintln!("Done in {tm}.");
+	match best_recipe {
+		Some(recipe) => {
+			println!("Best recipe found with {} vegetables!", recipe.unique_vegs.len());
+			println!("[ ] {:?}", recipe.cereal);
+			println!("[ ] water");
+			println!("[ ] {} sugars", recipe.filler_sugars);
+			for (veg, processing) in recipe.unique_vegs {
+				println!("[ ] {:?} {:?}", veg, processing)
+			}
+		}
+		None => {
+			println!("No recipe found")
+		}
+	}
 }
