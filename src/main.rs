@@ -1,5 +1,5 @@
-use std::collections::{BTreeSet, HashSet};
-
+use clap::Parser;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 impl Veg {
 	fn value(&self) -> usize {
 		match self {
@@ -14,6 +14,9 @@ impl Veg {
 			Veg::Potato => 47,
 			Veg::Tomato => 43,
 			Veg::Garlic => 92,
+			Veg::Wheat => 25,
+			Veg::Barley => 23,
+			Veg::Pumpkin => 45,
 		}
 	}
 }
@@ -32,6 +35,9 @@ enum Veg {
 	Potato,
 	Tomato,
 	Garlic,
+	Wheat,
+	Barley,
+	Pumpkin,
 }
 
 impl Processing {
@@ -40,6 +46,8 @@ impl Processing {
 			Processing::Whole => 0,
 			Processing::Chopped => 16,
 			Processing::Fried => 1,
+			Processing::Mashed => 32,
+			Processing::Roasted => 4,
 		}
 	}
 }
@@ -50,139 +58,137 @@ enum Processing {
 	Whole,
 	Chopped,
 	Fried,
+	Mashed,
+	Roasted,
 }
 
-fn chain_value(chain: &BTreeSet<(Veg, Processing)>) -> usize {
+fn chain_value(chain: &BTreeMap<Veg, Processing>) -> usize {
 	chain.iter().map(|(v, p)| v.value() + p.value()).sum()
 }
 
-struct Recipe {
-	items: BTreeSet<(Veg, Processing)>,
+#[derive(Parser)]
+struct Options {
+	#[arg(long)]
+	rare: bool,
+	target_value: usize,
+	#[arg(long, default_value = "5")]
+	max_length: usize,
 }
 
-#[derive(Default)]
-struct RecipeGraph {
-	nodes: Vec<BTreeSet<(Veg, Processing)>>,
-	edges: Vec<(BTreeSet<(Veg, Processing)>, (Veg, Processing))>,
-	visit_map: HashSet<usize>,
-}
-
-impl petgraph::visit::GraphBase for RecipeGraph {
-	type NodeId = usize;
-	type EdgeId = usize;
-}
-
-impl petgraph::visit::Visitable for RecipeGraph {
-	type Map = HashSet<usize>;
-
-	fn visit_map(&self) -> Self::Map {
-		self.visit_map.clone()
-	}
-	fn reset_map(&self, map: &mut Self::Map) {
-		map.clear()
-	}
-}
-
-impl<'a> petgraph::visit::IntoNeighbors for &'a RecipeGraph {
-	type Neighbors = std::slice::Iter<'a, (Veg, Processing)>;
-
-	fn neighbors(self, a: usize) -> Self::Neighbors {
-		let walked_nodes = &self.nodes[a];
-		let mut v = vec![];
-		for veg in [
-			Veg::Cabbage,
-			Veg::Carrot,
-			Veg::Corn,
-			Veg::Cucumber,
-			Veg::Lettuce,
-			Veg::Onion,
-			Veg::Pea,
-			Veg::PeaPod,
-			Veg::Potato,
-			Veg::Tomato,
-			Veg::Garlic,
-		] {
-			for processing in [Processing::Whole, Processing::Chopped, Processing::Fried] {
-				if !walked_nodes.contains(&(veg, processing)) {
-					v.push((veg, processing));
-				}
-			}
-		}
-		v.into_iter()
-	}
-}
+type NodeType = BTreeMap<Veg, Processing>;
+type EdgeType = usize;
+type RecipeGraph = petgraph::graph::Graph<NodeType, EdgeType>;
 
 fn main() {
-	let mut recipe_graph = RecipeGraph::default();
+	let options = Options::parse();
 
-	recipe_graph.nodes.push(Default::default());
+	let pregraph = std::time::Instant::now();
+	eprintln!("Populating graph...");
+	let mut graph = RecipeGraph::default();
 
-	let mut dfs = petgraph::visit::Dfs::new(&recipe_graph, 0);
+	let mut node_idxs: HashMap<NodeType, petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>> = Default::default();
 
-	dfs.next(&recipe_graph);
+	let mut node_queue = vec![];
+	let mut add_node = |idx: petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>, graph: &mut RecipeGraph, node_queue: &mut Vec<petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>>| {
+		let current_node = &graph[idx].clone();
+		if current_node.len() < options.max_length {
+			for veg in [
+				Veg::Cabbage,
+				Veg::Carrot,
+				Veg::Corn,
+				Veg::Cucumber,
+				Veg::Lettuce,
+				Veg::Onion,
+				Veg::Pea,
+				Veg::PeaPod,
+				Veg::Potato,
+				Veg::Tomato,
+				Veg::Garlic,
+				Veg::Pumpkin,
+			] {
+				if current_node.contains_key(&veg) {
+					continue;
+				};
 
-	// let mut dead_ends: BTreeSet<BTreeSet<(Veg, Processing)>> = BTreeSet::default();
-	// let target = 100;
-	// let max_ingredients = 10;
-	// let mut current_chain = BTreeSet::default();
-	// let mut options = BTreeSet::default();
-	// loop {
-	// 	if current_chain.len() == max_ingredients {
-	// 		dead_ends.insert(current_chain.clone());
-	// 		current_chain.clear();
-	// 	}
-	// 	let mut progress = false;
-	// 	for veg in [Veg::Cabbage,
-	// 		Veg::Carrot,
-	// 		Veg::Corn,
-	// 		Veg::Cucumber,
-	// 		Veg::Lettuce,
-	// 		Veg::Onion,
-	// 		Veg::Pea,
-	// 		Veg::PeaPod,
-	// 		Veg::Potato,
-	// 		Veg::Tomato,
-	// 		Veg::Garlic
-	// 	] {
-	// 		let mut keep_breaking = false;
-	// 		for processing in [Processing::Whole, Processing::Chopped, Processing::Fried] {
-	// 			let current_pair = (veg, processing);
-	// 			// eprintln!("Pair: {:?}", current_pair);
-	// 			if !current_chain.insert(current_pair) {
-	// 				// eprintln!("failed to insert");
-	// 				continue
-	// 			}
-	// 			if dead_ends.contains(&current_chain) {
-	// 				current_chain.remove(&current_pair);
-	// 				// eprintln!("dead end");
-	// 				continue
-	// 			}
-	// 			if chain_value(&current_chain) == target {
-	// 				// eprintln!("new hit!");
-	// 				if options.insert(current_chain.clone()) {
-	// 					eprintln!("New option found: {:?}", current_chain);
-	// 				}
-	// 			}
-	// 			progress = true;
-	// 			break
-	//
-	// 		}
-	// 		if progress {
-	// 			// eprintln!("made progress, that's enough");
-	// 			break
-	// 		}
-	// 	}
-	// 	if progress == false {
-	// 		if current_chain.len() == 0 {
-	// 			break
-	// 		}
-	// 		dead_ends.insert(current_chain.clone());
-	// 		current_chain.clear();
-	// 	}
-	// 	// println!("dead ends: {:?}, chain: {}, options: {}", dead_ends.len(), current_chain.len(), options.len());
-	// 	// std::thread::sleep(std::time::Duration::from_secs(1));
-	// }
-	// for option in options {
-	// 	println!("{:?}", option);
-	// }
+				for processing in [
+					Processing::Chopped,
+					Processing::Fried,
+					//Processing::Mashed,
+					// Processing::Roasted,
+				] {
+					let mut next_node = current_node.clone();
+					next_node.insert(veg, processing);
+					let next_value = chain_value(&next_node);
+					let next_idx = match node_idxs.get(&next_node) {
+						Some(next_idx) => *next_idx,
+						None => {
+							// eprintln!("{:?}", next_node);
+							let nnn = next_node.clone();
+							let idx = graph.add_node(next_node);
+							node_idxs.insert(nnn, idx);
+							idx
+						}
+					};
+					if graph.find_edge(idx, next_idx).is_none() {
+						graph.add_edge(idx, next_idx, next_value);
+						node_queue.push(next_idx);
+					}
+				}
+			}
+		};
+	};
+
+	let w_idx = graph.add_node([(Veg::Wheat, Processing::Whole)].into());
+	let b_idx = graph.add_node([(Veg::Barley, Processing::Whole)].into());
+
+	node_queue.push(w_idx);
+	node_queue.push(b_idx);
+
+	// populate the graph
+	while let Some(next_idx) = node_queue.pop() {
+		add_node(next_idx, &mut graph, &mut node_queue);
+		// eprintln!("Graph: {:?}", graph.edge_count());
+		// eprintln!("Queue: {:?}", node_queue.len());
+		// eprintln!(".");
+	}
+
+	let prefind = std::time::Instant::now();
+	let tm = prefind.duration_since(pregraph).as_secs();
+	eprintln!("Done in {tm}. Finding a recipe...");
+	// find matching recipes
+
+	let target_value = options.target_value;
+	let mut offset = 0;
+	offset += 40; // oven
+	offset += 47; // sugar
+	offset += 75; // cauldron
+	if options.rare {
+		offset += 1;
+	}
+
+	let mut dfs = petgraph::visit::Dfs::new(&graph, w_idx);
+
+	let mut current_leader = 0;
+	while let Some(next) = dfs.next(&graph) {
+		let value = (chain_value(&graph[next]) + offset) % 138;
+		if target_value == value && current_leader < graph[next].len() {
+			current_leader = graph[next].len();
+			eprintln!("Len: {} {:?}", graph[next].len(), graph[next]);
+		}
+	}
+
+	let mut dfs = petgraph::visit::Dfs::new(&graph, b_idx);
+
+	let mut current_leader = 0;
+	while let Some(next) = dfs.next(&graph) {
+		let value = (chain_value(&graph[next]) + offset) % 138;
+		if target_value == value && current_leader < graph[next].len() {
+			current_leader = graph[next].len();
+			eprintln!("Len: {} {:?}", graph[next].len(), graph[next]);
+		}
+	}
+
+	let postfind = std::time::Instant::now().duration_since(prefind).as_secs();
+	let tm = prefind.duration_since(pregraph).as_secs();
+	eprintln!("Done in {tm}.");
 }
