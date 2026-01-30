@@ -152,7 +152,7 @@ pub enum Affinity {
 }
 
 impl Affinity {
-	fn offset(&self) -> usize {
+	pub fn offset(&self) -> usize {
 		match self {
 			Affinity::AggressiveFighting => 109,
 			Affinity::Alchemy => 25,
@@ -308,7 +308,7 @@ impl PartialOrd for Recipe {
 }
 
 impl Recipe {
-	fn affinity(&self) -> usize {
+	pub fn affinity(&self) -> usize {
 		let sum: usize = self.unique_vegs.iter().map(|(v, p)| v.value() + p.value()).sum();
 		sum + self.cereal.value() + self.filler_sugars * 47
 	}
