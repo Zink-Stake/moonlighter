@@ -1,15 +1,15 @@
 use clap::Parser;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Hash, Clone, Debug, Eq, PartialEq)]
-struct Recipe {
+pub struct Recipe {
 	unique_vegs: BTreeMap<Veg, Processing>,
 	cereal: Veg,
 	filler_sugars: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, clap::ValueEnum)]
-enum Affinity {
+pub enum Affinity {
 	#[default]
 	AggressiveFighting,
 	Alchemy,
@@ -346,7 +346,7 @@ impl Veg {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
-enum Veg {
+pub enum Veg {
 	#[default]
 	Cabbage,
 	Carrot,
@@ -377,7 +377,7 @@ impl Processing {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
-enum Processing {
+pub enum Processing {
 	#[default]
 	Whole,
 	Chopped,
@@ -501,8 +501,8 @@ fn main() {
 	}
 
 	let prefind = std::time::Instant::now();
-	let tm = prefind.duration_since(pregraph).as_secs();
-	eprintln!("Done in {tm}. Finding a recipe...");
+	let tm = prefind.duration_since(pregraph).as_millis();
+	eprintln!("Done in {tm}ms. Finding a recipe...");
 	// find matching recipes
 
 	let target_value = (options.affinity.offset() + options.player_number) % 138;
@@ -527,9 +527,9 @@ fn main() {
 		}
 	}
 
-	let postfind = std::time::Instant::now().duration_since(prefind).as_secs();
-	let tm = prefind.duration_since(pregraph).as_secs();
-	eprintln!("Done in {tm}.");
+	let postfind = std::time::Instant::now();
+	let tm = postfind.duration_since(prefind).as_millis();
+	eprintln!("Done in {tm}ms.");
 	match best_recipe {
 		Some(recipe) => {
 			println!("Best recipe found with {} vegetables!", recipe.unique_vegs.len());
