@@ -8,6 +8,17 @@ struct Recipe {
 	filler_sugars: usize,
 }
 
+impl PartialOrd for Recipe {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(
+			self.unique_vegs
+				.len()
+				.cmp(&other.unique_vegs.len())
+				.then_with(|| self.filler_sugars.cmp(&other.filler_sugars).reverse()),
+		)
+	}
+}
+
 impl Recipe {
 	fn affinity(&self) -> usize {
 		let sum: usize = self.unique_vegs.iter().map(|(v, p)| v.value() + p.value()).sum();
@@ -163,7 +174,9 @@ fn main() {
 				}
 			}
 		} else if current_node.filler_sugars == 1 {
-			for add in 2..options.max_sugars {
+			// add sugar chain
+			let mut current_node_idx = idx;
+			for add in (2..options.max_sugars + 1).rev() {
 				let mut next_node = current_node.clone();
 				next_node.filler_sugars = add;
 				let next_value = next_node.affinity();
@@ -177,10 +190,10 @@ fn main() {
 						idx
 					}
 				};
-				if graph.find_edge(idx, next_idx).is_none() {
-					graph.add_edge(idx, next_idx, next_value);
-					node_queue.push(next_idx);
+				if graph.find_edge(current_node_idx, next_idx).is_none() {
+					graph.add_edge(current_node_idx, next_idx, next_value);
 				}
+				current_node_idx = next_idx;
 			}
 		}
 	};
@@ -214,15 +227,13 @@ fn main() {
 
 	let mut dfs = petgraph::visit::Dfs::new(&graph, w_idx);
 
-	let mut max_vegs = 0;
-	let mut min_sugars = 99;
+	let mut best_recipe = None;
 	while let Some(next) = dfs.next(&graph) {
 		let next_node = &graph[next];
 		let value = (next_node.affinity() + offset) % 138;
 
-		if target_value == value && next_node.unique_vegs.len() > max_vegs || next_node.unique_vegs.len() == max_vegs && next_node.filler_sugars < min_sugars {
-			max_vegs = next_node.unique_vegs.len();
-			min_sugars = next_node.filler_sugars;
+		if target_value == value && best_recipe.as_ref().is_none_or(|r| r < next_node) {
+			best_recipe = Some(next_node.clone());
 			eprintln!("Len: {} {:?}", graph[next].unique_vegs.len(), graph[next]);
 		}
 	}
