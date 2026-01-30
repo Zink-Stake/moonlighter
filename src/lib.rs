@@ -331,16 +331,16 @@ impl Veg {
 			Veg::Carrot => 41,
 			Veg::Corn => 44,
 			Veg::Cucumber => 17,
+			Veg::Garlic => 92,
 			Veg::Lettuce => 45,
 			Veg::Onion => 91,
 			Veg::Pea => 58,
 			Veg::PeaPod => 46,
 			Veg::Potato => 47,
+			Veg::Pumpkin => 45,
 			Veg::Tomato => 43,
-			Veg::Garlic => 92,
 			Veg::Wheat => 25,
 			Veg::Barley => 23,
-			Veg::Pumpkin => 45,
 		}
 	}
 }
