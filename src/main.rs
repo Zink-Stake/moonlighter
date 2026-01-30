@@ -207,6 +207,7 @@ fn main() {
 	let mut offset = 0;
 	offset += 40; // oven
 	offset += 75; // cauldron
+	offset += 6; // water
 	if options.rare {
 		offset += 1;
 	}
