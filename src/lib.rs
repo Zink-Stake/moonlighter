@@ -503,7 +503,7 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 	// tracing::debug!("Done in {tm}ms. Finding a recipe...");
 	// find matching recipes
 
-	let target_value = (options.affinity.offset() + options.player_number) % 138;
+	let target_value = (138 - options.player_number - 3 + options.affinity.offset()) % 138;
 	let mut offset = 0;
 	offset += 40; // oven
 	offset += 75; // cauldron
