@@ -8,3 +8,4 @@ license = "AGPLv3"
 [dependencies]
 clap = { version = "4.5.54", features = ["derive"] }
 petgraph = "0.8.3"
+tracing = "0.1.44"
