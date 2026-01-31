@@ -1,14 +1,15 @@
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
-#[derive(Hash, Clone, Debug, Eq, PartialEq)]
+#[derive(Hash, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Recipe {
 	pub unique_vegs: BTreeMap<Veg, Processing>,
 	pub cereal: Veg,
 	pub filler_sugars: usize,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, clap::ValueEnum)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, clap::ValueEnum)]
 pub enum Affinity {
 	#[default]
 	AggressiveFighting,
@@ -345,7 +346,7 @@ impl Veg {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub enum Veg {
 	#[default]
 	Cabbage,
@@ -376,7 +377,7 @@ impl Processing {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub enum Processing {
 	#[default]
 	Whole,
