@@ -8,10 +8,9 @@ fn main() {
 			println!("Best recipe found with {} vegetables!", recipe.unique_vegs.len());
 			println!("[ ] water");
 			println!("[ ] {} sugars", recipe.filler_sugars);
-			println!("[ ] barley");
-			println!("[ ] oats");
-			println!("[ ] rye");
-			println!("[ ] wheat");
+			for cereal in &recipe.cereals {
+				println!("[ ] {:?}", cereal)
+			}
 			for (veg, processing) in recipe.unique_vegs {
 				println!("[ ] {:?} {:?}", veg, processing)
 			}

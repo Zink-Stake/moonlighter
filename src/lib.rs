@@ -5,7 +5,17 @@ use std::collections::{BTreeMap, HashMap};
 #[derive(Hash, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Recipe {
 	pub unique_vegs: BTreeMap<Veg, Processing>,
+	pub cereals: Vec<Cereal>,
 	pub filler_sugars: usize,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
+pub enum Cereal {
+	#[default]
+	Barley,
+	Oat,
+	Rye,
+	Wheat,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, clap::ValueEnum)]
@@ -310,12 +320,8 @@ impl PartialOrd for Recipe {
 impl Recipe {
 	pub fn affinity(&self) -> usize {
 		let sum: usize = self.unique_vegs.iter().map(|(v, p)| v.value() + p.value()).sum();
-		sum +
-			25 + // wheat
-			23 + // rye
-			23 + // barley
-			25 + // oats
-			self.filler_sugars * 47
+		let cereal_sum: usize = self.cereals.iter().map(Cereal::value).sum();
+		sum + cereal_sum + self.filler_sugars * 47
 	}
 }
 
@@ -324,6 +330,7 @@ impl Default for Recipe {
 		Recipe {
 			unique_vegs: Default::default(),
 			filler_sugars: 1,
+			cereals: Default::default(),
 		}
 	}
 }
@@ -376,6 +383,17 @@ impl Processing {
 	}
 }
 
+impl Cereal {
+	fn value(&self) -> usize {
+		match self {
+			Cereal::Barley => 23,
+			Cereal::Oat => 25,
+			Cereal::Rye => 23,
+			Cereal::Wheat => 25,
+		}
+	}
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub enum Processing {
 	#[default]
@@ -393,9 +411,11 @@ pub struct Options {
 	pub player_number: usize,
 	pub affinity: Affinity,
 	#[arg(long, default_value = "12")]
-	pub max_length: usize,
+	pub max_vegetables: usize,
 	#[arg(long, default_value = "50")]
 	pub max_sugars: usize,
+	#[arg(long)]
+	pub full_cereals: bool,
 }
 
 type NodeType = Recipe;
@@ -437,7 +457,7 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 	let mut node_queue = vec![];
 	let mut add_node = |idx: petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>, graph: &mut RecipeGraph, node_queue: &mut Vec<petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>>| {
 		let current_node = &graph[idx].clone();
-		if current_node.unique_vegs.len() < options.max_length {
+		if current_node.unique_vegs.len() < options.max_vegetables {
 			for (veg, processing) in veg_pool.clone() {
 				if current_node.unique_vegs.contains_key(&veg) {
 					continue;
@@ -485,7 +505,15 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 		}
 	};
 
-	let w_idx = graph.add_node(Default::default());
+	let mut first_node: Recipe = Default::default();
+
+	if options.full_cereals {
+		first_node.cereals = vec![Cereal::Barley, Cereal::Oat, Cereal::Rye, Cereal::Wheat];
+	} else {
+		first_node.cereals = vec![Cereal::Wheat];
+	}
+
+	let w_idx = graph.add_node(first_node);
 
 	node_queue.push(w_idx);
 	// node_queue.push(b_idx);
