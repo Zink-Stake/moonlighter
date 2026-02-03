@@ -6,9 +6,12 @@ fn main() {
 	match best_recipe {
 		Some(recipe) => {
 			println!("Best recipe found with {} vegetables!", recipe.unique_vegs.len());
-			println!("[ ] {:?}", recipe.cereal);
 			println!("[ ] water");
 			println!("[ ] {} sugars", recipe.filler_sugars);
+			println!("[ ] barley");
+			println!("[ ] oats");
+			println!("[ ] rye");
+			println!("[ ] wheat");
 			for (veg, processing) in recipe.unique_vegs {
 				println!("[ ] {:?} {:?}", veg, processing)
 			}

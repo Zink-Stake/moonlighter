@@ -5,7 +5,6 @@ use std::collections::{BTreeMap, HashMap};
 #[derive(Hash, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Recipe {
 	pub unique_vegs: BTreeMap<Veg, Processing>,
-	pub cereal: Veg,
 	pub filler_sugars: usize,
 }
 
@@ -311,7 +310,12 @@ impl PartialOrd for Recipe {
 impl Recipe {
 	pub fn affinity(&self) -> usize {
 		let sum: usize = self.unique_vegs.iter().map(|(v, p)| v.value() + p.value()).sum();
-		sum + self.cereal.value() + self.filler_sugars * 47
+		sum +
+			25 + // wheat
+			23 + // rye
+			23 + // barley
+			25 + // oats
+			self.filler_sugars * 47
 	}
 }
 
@@ -319,7 +323,6 @@ impl Default for Recipe {
 	fn default() -> Self {
 		Recipe {
 			unique_vegs: Default::default(),
-			cereal: Veg::Wheat,
 			filler_sugars: 1,
 		}
 	}
@@ -340,8 +343,6 @@ impl Veg {
 			Veg::Potato => 47,
 			Veg::Pumpkin => 45,
 			Veg::Tomato => 43,
-			Veg::Wheat => 25,
-			Veg::Barley => 23,
 		}
 	}
 }
@@ -354,15 +355,13 @@ pub enum Veg {
 	Corn,
 	Cucumber,
 	Lettuce,
+	Garlic,
 	Onion,
 	Pea,
 	PeaPod,
 	Potato,
-	Tomato,
-	Garlic,
-	Wheat,
-	Barley,
 	Pumpkin,
+	Tomato,
 }
 
 impl Processing {
