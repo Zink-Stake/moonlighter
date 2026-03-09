@@ -1,12 +1,13 @@
 [package]
 name = "moonlighter"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 authors = ["Voker57 voker57@gmail.com"]
 license = "AGPLv3"
 
 [dependencies]
 clap = { version = "4.5.54", features = ["derive"] }
-petgraph = "0.8.3"
-tracing = "0.1.44"
+tracing = { git="https://github.com/mladedav/tracing.git", branch="dm/filter" }
 serde = { version = "1.0.228", features = ["derive"] }
+anyhow = "1.0.102"
+tracing-subscriber =  {git="https://github.com/mladedav/tracing.git", features = ["env-filter", "fmt"], branch="dm/filter" }

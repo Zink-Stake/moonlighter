@@ -1,12 +1,18 @@
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, btree_map};
 
 #[derive(Hash, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Recipe {
-	pub unique_vegs: BTreeMap<Veg, Processing>,
+	pub vegs: Vec<Veg>,
+	pub processings: Vec<(Processing, usize)>,
 	pub cereals: Vec<Cereal>,
-	pub filler_sugars: usize,
+	pub sugars: usize,
+	pub barleys: usize,
+}
+
+pub trait HasAffinity {
+	fn affinity(&self) -> usize;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -17,6 +23,8 @@ pub enum Cereal {
 	Rye,
 	Wheat,
 }
+
+pub const TOTAL_AFFINITIES: usize = 138;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, clap::ValueEnum)]
 pub enum Affinity {
@@ -308,35 +316,33 @@ impl Affinity {
 
 impl PartialOrd for Recipe {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		Some(
-			self.unique_vegs
-				.len()
-				.cmp(&other.unique_vegs.len())
-				.then_with(|| self.filler_sugars.cmp(&other.filler_sugars).reverse()),
-		)
+		Some(self.vegs.len().cmp(&other.vegs.len()).then_with(|| self.sugars.cmp(&other.sugars).reverse()))
 	}
 }
 
-impl Recipe {
-	pub fn affinity(&self) -> usize {
-		let sum: usize = self.unique_vegs.iter().map(|(v, p)| v.value() + p.value()).sum();
-		let cereal_sum: usize = self.cereals.iter().map(Cereal::value).sum();
-		sum + cereal_sum + self.filler_sugars * 47
+impl HasAffinity for Recipe {
+	fn affinity(&self) -> usize {
+		let sum: usize = self.vegs.iter().map(HasAffinity::affinity).sum();
+		let cereal_sum: usize = self.cereals.iter().map(HasAffinity::affinity).sum();
+		let processing_sum: usize = self.processings.iter().map(|(v, c)| v.affinity() * c).sum();
+		sum + cereal_sum + processing_sum + self.sugars * 47 + self.barleys * 23
 	}
 }
 
 impl Default for Recipe {
 	fn default() -> Self {
 		Recipe {
-			unique_vegs: Default::default(),
-			filler_sugars: 1,
+			vegs: Default::default(),
+			sugars: 1,
+			barleys: 0,
 			cereals: Default::default(),
+			processings: Default::default(),
 		}
 	}
 }
 
-impl Veg {
-	fn value(&self) -> usize {
+impl HasAffinity for Veg {
+	fn affinity(&self) -> usize {
 		match self {
 			Veg::Cabbage => 42,
 			Veg::Carrot => 41,
@@ -371,8 +377,8 @@ pub enum Veg {
 	Tomato,
 }
 
-impl Processing {
-	fn value(&self) -> usize {
+impl HasAffinity for Processing {
+	fn affinity(&self) -> usize {
 		match self {
 			Processing::Whole => 0,
 			Processing::Chopped => 16,
@@ -383,8 +389,8 @@ impl Processing {
 	}
 }
 
-impl Cereal {
-	fn value(&self) -> usize {
+impl HasAffinity for Cereal {
+	fn affinity(&self) -> usize {
 		match self {
 			Cereal::Barley => 23,
 			Cereal::Oat => 25,
@@ -406,31 +412,47 @@ pub enum Processing {
 
 #[derive(Parser)]
 pub struct Options {
-	#[arg(long)]
-	pub rare: bool,
+	#[arg(long, default_value = "0")]
+	pub custom_offset: usize,
 	pub player_number: usize,
 	pub affinity: Affinity,
 	#[arg(long, default_value = "12")]
-	pub max_vegetables: usize,
-	#[arg(long, default_value = "50")]
-	pub max_sugars: usize,
+	pub vegs: usize,
+	#[arg(long, default_value = "70")]
+	pub max_fillers: usize,
 	#[arg(long)]
 	pub full_cereals: bool,
+	#[arg(long)]
+	pub complex_processing: bool,
 }
 
-type NodeType = Recipe;
-type EdgeType = usize;
-type RecipeGraph = petgraph::graph::Graph<NodeType, EdgeType>;
+#[derive(PartialEq)]
+struct Adjustment {
+	processings: Vec<(Processing, usize)>,
+	sugars: usize,
+	barleys: usize,
+}
+
+impl HasAffinity for Adjustment {
+	fn affinity(&self) -> usize {
+		let processing_sum: usize = self.processings.iter().map(|(p, c)| p.affinity() * c).sum();
+		(processing_sum + self.sugars * 47 + self.barleys * 23) % TOTAL_AFFINITIES
+	}
+}
+
+// Compare labor cost. first check sugars, then if the first processing is dominating. NB! fails for zero processing.
+impl PartialOrd for Adjustment {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(
+			(self.sugars + self.barleys)
+				.cmp(&(other.sugars + other.barleys))
+				.then_with(|| self.processings[0].1.cmp(&other.processings[0].1).reverse()),
+		)
+	}
+}
 
 pub fn find_recipe(options: &Options) -> Option<Recipe> {
-	// let pregraph = std::time::Instant::now();
-	tracing::debug!("Populating graph...");
-	let mut graph = RecipeGraph::default();
-
-	let mut node_idxs: HashMap<NodeType, petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>> = Default::default();
-
-	let mut veg_pool: Vec<(Veg, Processing)> = Default::default();
-	for veg in [
+	let veg_pool: Vec<Veg> = vec![
 		Veg::Cabbage,
 		Veg::Carrot,
 		Veg::Corn,
@@ -443,118 +465,77 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 		Veg::Tomato,
 		Veg::Garlic,
 		Veg::Pumpkin,
-	] {
-		for processing in [
-			Processing::Chopped,
-			//Processing::Fried,
-			Processing::Mashed,
-			// Processing::Roasted,
-		] {
-			veg_pool.push((veg, processing));
-		}
-	}
+	];
 
-	let mut node_queue = vec![];
-	let mut add_node = |idx: petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>, graph: &mut RecipeGraph, node_queue: &mut Vec<petgraph::graph::NodeIndex<petgraph::graph::DefaultIx>>| {
-		let current_node = &graph[idx].clone();
-		if current_node.unique_vegs.len() < options.max_vegetables {
-			for (veg, processing) in veg_pool.clone() {
-				if current_node.unique_vegs.contains_key(&veg) {
-					continue;
-				};
-				let mut next_node = current_node.clone();
-				next_node.unique_vegs.insert(veg, processing);
-				let next_value = next_node.affinity();
-				let next_idx = match node_idxs.get(&next_node) {
-					Some(next_idx) => *next_idx,
-					None => {
-						// eprintln!("{:?}", next_node);
-						let nnn = next_node.clone();
-						let idx = graph.add_node(next_node);
-						node_idxs.insert(nnn, idx);
-						idx
-					}
-				};
-				if graph.find_edge(idx, next_idx).is_none() {
-					graph.add_edge(idx, next_idx, next_value);
-					node_queue.push(next_idx);
-				}
-			}
-		} else if current_node.filler_sugars == 1 {
-			// add sugar chain
-			let mut current_node_idx = idx;
-			for add in (2..options.max_sugars + 1).rev() {
-				let mut next_node = current_node.clone();
-				next_node.filler_sugars = add;
-				let next_value = next_node.affinity();
-				let next_idx = match node_idxs.get(&next_node) {
-					Some(next_idx) => *next_idx,
-					None => {
-						// eprintln!("{:?}", next_node);
-						let nnn = next_node.clone();
-						let idx = graph.add_node(next_node);
-						node_idxs.insert(nnn, idx);
-						idx
-					}
-				};
-				if graph.find_edge(current_node_idx, next_idx).is_none() {
-					graph.add_edge(current_node_idx, next_idx, next_value);
-				}
-				current_node_idx = next_idx;
-			}
-		}
+	let (processing1, processing2) = if options.complex_processing {
+		(Processing::Fried, Processing::Roasted)
+	} else {
+		(Processing::Chopped, Processing::Mashed)
 	};
 
-	let mut first_node: Recipe = Default::default();
+	// Assemble a set of shortest adjustments
+	let mut adjustments: BTreeMap<usize, Adjustment> = Default::default();
+
+	for processings1 in 0..options.vegs + 1 {
+		let processings2 = options.vegs - processings1;
+		for sugars in 0..options.max_fillers + 1 {
+			for barleys in 0..options.max_fillers + 1 - sugars {
+				let adjustment = Adjustment {
+					processings: vec![(processing1, processings1), (processing2, processings2)],
+					sugars,
+					barleys,
+				};
+				let current_adjustment = adjustments.entry(adjustment.affinity());
+				match current_adjustment {
+					btree_map::Entry::Vacant(v) => {
+						v.insert(adjustment);
+					}
+					btree_map::Entry::Occupied(mut o) => {
+						if o.get() > &adjustment {
+							o.insert(adjustment);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if adjustments.len() != TOTAL_AFFINITIES {
+		tracing::warn!("Not all adjustments could be found, {}/{}", adjustments.len(), TOTAL_AFFINITIES);
+	}
+
+	let mut recipe = Recipe {
+		vegs: veg_pool.into_iter().take(options.vegs).collect(),
+		..Default::default()
+	};
 
 	if options.full_cereals {
-		first_node.cereals = vec![Cereal::Barley, Cereal::Oat, Cereal::Rye, Cereal::Wheat];
+		recipe.cereals = vec![Cereal::Oat, Cereal::Rye, Cereal::Wheat];
+		recipe.barleys = 1;
 	} else {
-		first_node.cereals = vec![Cereal::Wheat];
+		recipe.cereals = vec![Cereal::Wheat];
 	}
 
-	let w_idx = graph.add_node(first_node);
-
-	node_queue.push(w_idx);
-	// node_queue.push(b_idx);
-
-	// populate the graph
-	while let Some(next_idx) = node_queue.pop() {
-		add_node(next_idx, &mut graph, &mut node_queue);
-		// eprintln!("Graph: {:?}", graph.edge_count());
-		// eprintln!("Queue: {:?}", node_queue.len());
-		// eprintln!(".");
-	}
-
-	// let prefind = std::time::Instant::now();
-	// let tm = prefind.duration_since(pregraph).as_millis();
-	// tracing::debug!("Done in {tm}ms. Finding a recipe...");
-	// find matching recipes
-
-	let target_value = (138 - options.player_number - 3 + options.affinity.offset()) % 138;
+	let target_value = (TOTAL_AFFINITIES - options.player_number - 3 + options.affinity.offset()) % TOTAL_AFFINITIES;
 	let mut offset = 0;
 	offset += 40; // oven
 	offset += 75; // cauldron
 	offset += 6; // water
-	if options.rare {
-		offset += 1;
-	}
+	offset += options.custom_offset;
+	let value = (recipe.affinity() + offset) % TOTAL_AFFINITIES;
+	let adjustment_needed = (target_value + TOTAL_AFFINITIES - value) % TOTAL_AFFINITIES;
 
-	let mut dfs = petgraph::visit::Dfs::new(&graph, w_idx);
-
-	let mut best_recipe = None;
-	while let Some(next) = dfs.next(&graph) {
-		let next_node = &graph[next];
-		let value = (next_node.affinity() + offset) % 138;
-
-		if target_value == value && best_recipe.as_ref().is_none_or(|r| r < next_node) {
-			best_recipe = Some(next_node.clone());
-			// eprintln!("Len: {} {:?}", graph[next].unique_vegs.len(), graph[next]);
+	tracing::warn!("Needed {} adjustment", adjustment_needed);
+	match adjustments.get(&adjustment_needed) {
+		Some(adjustment) => {
+			recipe.sugars += adjustment.sugars;
+			recipe.barleys += adjustment.barleys;
+			recipe.processings = adjustment.processings.clone();
+		}
+		None => {
+			return None;
 		}
 	}
 
-	// let postfind = std::time::Instant::now();
-	// let tm = postfind.duration_since(prefind).as_millis();
-	// tracing::debug!("Done in {tm}ms.");
-	best_recipe
+	Some(recipe)
 }
