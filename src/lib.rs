@@ -5,14 +5,14 @@ use std::collections::{BTreeMap, btree_map};
 #[derive(Hash, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Recipe {
 	pub vegs: Vec<Veg>,
-	pub processings: Vec<(Processing, usize)>,
+	pub processings: Vec<(Processing, u64)>,
 	pub cereals: Vec<Cereal>,
-	pub sugars: usize,
-	pub barleys: usize,
+	pub sugars: u64,
+	pub barleys: u64,
 }
 
 pub trait HasAffinity {
-	fn affinity(&self) -> usize;
+	fn affinity(&self) -> u64;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -24,7 +24,7 @@ pub enum Cereal {
 	Wheat,
 }
 
-pub const TOTAL_AFFINITIES: usize = 138;
+pub const TOTAL_AFFINITIES: u64 = 138;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, clap::ValueEnum)]
 pub enum Affinity {
@@ -170,7 +170,7 @@ pub enum Affinity {
 }
 
 impl Affinity {
-	pub fn offset(&self) -> usize {
+	pub fn offset(&self) -> u64 {
 		match self {
 			Affinity::AggressiveFighting => 109,
 			Affinity::Alchemy => 25,
@@ -321,10 +321,10 @@ impl PartialOrd for Recipe {
 }
 
 impl HasAffinity for Recipe {
-	fn affinity(&self) -> usize {
-		let sum: usize = self.vegs.iter().map(HasAffinity::affinity).sum();
-		let cereal_sum: usize = self.cereals.iter().map(HasAffinity::affinity).sum();
-		let processing_sum: usize = self.processings.iter().map(|(v, c)| v.affinity() * c).sum();
+	fn affinity(&self) -> u64 {
+		let sum: u64 = self.vegs.iter().map(HasAffinity::affinity).sum();
+		let cereal_sum: u64 = self.cereals.iter().map(HasAffinity::affinity).sum();
+		let processing_sum: u64 = self.processings.iter().map(|(v, c)| v.affinity() * c).sum();
 		let sugars_sum = self.sugars * 47;
 		let barleys_sum = self.barleys * 23;
 		tracing::debug!("Recipe affinity: vegs {sum} + cereals {cereal_sum} + processing {processing_sum} + sugars {sugars_sum} + barleys {barleys_sum}");
@@ -345,7 +345,7 @@ impl Default for Recipe {
 }
 
 impl HasAffinity for Veg {
-	fn affinity(&self) -> usize {
+	fn affinity(&self) -> u64 {
 		match self {
 			Veg::Cabbage => 42,
 			Veg::Carrot => 41,
@@ -381,7 +381,7 @@ pub enum Veg {
 }
 
 impl HasAffinity for Processing {
-	fn affinity(&self) -> usize {
+	fn affinity(&self) -> u64 {
 		match self {
 			Processing::Whole => 0,
 			Processing::Chopped => 16,
@@ -393,7 +393,7 @@ impl HasAffinity for Processing {
 }
 
 impl HasAffinity for Cereal {
-	fn affinity(&self) -> usize {
+	fn affinity(&self) -> u64 {
 		match self {
 			Cereal::Barley => 23,
 			Cereal::Oat => 25,
@@ -416,13 +416,13 @@ pub enum Processing {
 #[derive(Parser)]
 pub struct Options {
 	#[arg(long, default_value = "0")]
-	pub custom_offset: usize,
-	pub player_number: usize,
+	pub custom_offset: u64,
+	pub player_number: u64,
 	pub affinity: Affinity,
 	#[arg(long, default_value = "12")]
-	pub vegs: usize,
+	pub vegs: u64,
 	#[arg(long, default_value = "70")]
-	pub max_fillers: usize,
+	pub max_fillers: u64,
 	#[arg(long)]
 	pub full_cereals: bool,
 	#[arg(long)]
@@ -431,14 +431,14 @@ pub struct Options {
 
 #[derive(PartialEq)]
 struct Adjustment {
-	processings: Vec<(Processing, usize)>,
-	sugars: usize,
-	barleys: usize,
+	processings: Vec<(Processing, u64)>,
+	sugars: u64,
+	barleys: u64,
 }
 
 impl HasAffinity for Adjustment {
-	fn affinity(&self) -> usize {
-		let processing_sum: usize = self.processings.iter().map(|(p, c)| p.affinity() * c).sum();
+	fn affinity(&self) -> u64 {
+		let processing_sum: u64 = self.processings.iter().map(|(p, c)| p.affinity() * c).sum();
 		(processing_sum + self.sugars * 47 + self.barleys * 23) % TOTAL_AFFINITIES
 	}
 }
@@ -477,12 +477,12 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 	};
 
 	// Assemble a set of shortest adjustments
-	let mut adjustments: BTreeMap<usize, Adjustment> = Default::default();
+	let mut adjustments: BTreeMap<u64, Adjustment> = Default::default();
 
-	for processings1 in 0..options.vegs + 1 {
-		let processings2 = options.vegs - processings1;
-		for sugars in 0..options.max_fillers + 1 {
-			for barleys in 0..options.max_fillers + 1 - sugars {
+	for processings1 in 0..options.vegs.strict_add(1) {
+		let processings2 = options.vegs.strict_sub(processings1);
+		for sugars in 0..options.max_fillers.strict_add(1) {
+			for barleys in 0..options.max_fillers.strict_add(1).strict_sub(sugars) {
 				let adjustment = Adjustment {
 					processings: vec![(processing1, processings1), (processing2, processings2)],
 					sugars,
@@ -503,12 +503,12 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 		}
 	}
 
-	if adjustments.len() != TOTAL_AFFINITIES {
+	if adjustments.len() != TOTAL_AFFINITIES as usize {
 		tracing::warn!("Not all adjustments could be found, {}/{}", adjustments.len(), TOTAL_AFFINITIES);
 	}
 
 	let mut recipe = Recipe {
-		vegs: veg_pool.into_iter().take(options.vegs).collect(),
+		vegs: veg_pool.into_iter().take(options.vegs as usize).collect(),
 		..Default::default()
 	};
 
@@ -518,7 +518,7 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 		recipe.cereals = vec![];
 	}
 
-	let target_value = (TOTAL_AFFINITIES * 3 - options.player_number - 3 + options.affinity.offset()) % TOTAL_AFFINITIES;
+	let target_value = ((TOTAL_AFFINITIES * 3).strict_sub(options.player_number).strict_sub(3).strict_add(options.affinity.offset())) % TOTAL_AFFINITIES;
 	let mut offset = 0;
 	offset += 40; // oven
 	offset += 75; // cauldron
@@ -527,7 +527,7 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 	let value = (recipe.affinity() + offset) % TOTAL_AFFINITIES;
 	tracing::debug!("Value of the base recipe: {}", value);
 	tracing::debug!("Needed value: {}", target_value);
-	let adjustment_needed = (target_value + TOTAL_AFFINITIES - value) % TOTAL_AFFINITIES;
+	let adjustment_needed = (target_value + TOTAL_AFFINITIES.strict_sub(value)) % TOTAL_AFFINITIES;
 
 	tracing::debug!("Needed {} adjustment", adjustment_needed);
 	match adjustments.get(&adjustment_needed) {
