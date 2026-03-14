@@ -325,7 +325,10 @@ impl HasAffinity for Recipe {
 		let sum: usize = self.vegs.iter().map(HasAffinity::affinity).sum();
 		let cereal_sum: usize = self.cereals.iter().map(HasAffinity::affinity).sum();
 		let processing_sum: usize = self.processings.iter().map(|(v, c)| v.affinity() * c).sum();
-		sum + cereal_sum + processing_sum + self.sugars * 47 + self.barleys * 23
+		let sugars_sum = self.sugars * 47;
+		let barleys_sum = self.barleys * 23;
+		tracing::debug!("Recipe affinity: vegs {sum} + cereals {cereal_sum} + processing {processing_sum} + sugars {sugars_sum} + barleys {barleys_sum}");
+		sum + cereal_sum + processing_sum + sugars_sum + barleys_sum
 	}
 }
 
@@ -334,7 +337,7 @@ impl Default for Recipe {
 		Recipe {
 			vegs: Default::default(),
 			sugars: 1,
-			barleys: 0,
+			barleys: 1,
 			cereals: Default::default(),
 			processings: Default::default(),
 		}
@@ -511,21 +514,22 @@ pub fn find_recipe(options: &Options) -> Option<Recipe> {
 
 	if options.full_cereals {
 		recipe.cereals = vec![Cereal::Oat, Cereal::Rye, Cereal::Wheat];
-		recipe.barleys = 1;
 	} else {
-		recipe.cereals = vec![Cereal::Wheat];
+		recipe.cereals = vec![];
 	}
 
-	let target_value = (TOTAL_AFFINITIES - options.player_number - 3 + options.affinity.offset()) % TOTAL_AFFINITIES;
+	let target_value = (TOTAL_AFFINITIES * 3 - options.player_number - 3 + options.affinity.offset()) % TOTAL_AFFINITIES;
 	let mut offset = 0;
 	offset += 40; // oven
 	offset += 75; // cauldron
 	offset += 6; // water
 	offset += options.custom_offset;
 	let value = (recipe.affinity() + offset) % TOTAL_AFFINITIES;
+	tracing::debug!("Value of the base recipe: {}", value);
+	tracing::debug!("Needed value: {}", target_value);
 	let adjustment_needed = (target_value + TOTAL_AFFINITIES - value) % TOTAL_AFFINITIES;
 
-	tracing::warn!("Needed {} adjustment", adjustment_needed);
+	tracing::debug!("Needed {} adjustment", adjustment_needed);
 	match adjustments.get(&adjustment_needed) {
 		Some(adjustment) => {
 			recipe.sugars += adjustment.sugars;
