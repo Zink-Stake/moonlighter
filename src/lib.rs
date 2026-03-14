@@ -413,7 +413,7 @@ pub enum Processing {
 	Roasted,
 }
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 pub struct Options {
 	#[arg(long, default_value = "0")]
 	pub custom_offset: u64,
